@@ -1,17 +1,8 @@
 import { Scene } from 'phaser';
 import * as Phaser from 'phaser';
-import { IncrementResponse, DecrementResponse, InitResponse } from '../../../shared/types/api';
 import { GridPosition, GAME_CONFIG, GridUtils, LevelData } from '../core/GameTypes';
 
 export class FlowArchitectGame extends Scene {
-  // camera: Phaser.Cameras.Scene2D.Camera;
-  // background: Phaser.GameObjects.Image;
-  // msg_text: Phaser.GameObjects.Text;
-  // count: number = 0;
-  // countText: Phaser.GameObjects.Text;
-  // incButton: Phaser.GameObjects.Text;
-  // decButton: Phaser.GameObjects.Text;
-  // goButton: Phaser.GameObjects.Text;
   private gridContainer!: Phaser.GameObjects.Container;
   private gridBackground!: Phaser.GameObjects.Graphics;
   private currentLevel: LevelData | null = null;
@@ -27,7 +18,7 @@ export class FlowArchitectGame extends Scene {
     this.setupCamera();
     this.createTestLevel();
     this.createGrid();
-    //this.setupInput();
+    this.setupInput();
   }
 
   private setupCamera() {
@@ -98,4 +89,39 @@ export class FlowArchitectGame extends Scene {
     this.gridContainer.y = (this.scale.height - gridPixelHeight) / 2;
   }
 
+  private setupInput() {
+    // click handling for grid tiles
+    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      this.handleGridClick(pointer.x, pointer.y);
+    });
+
+    this.scale.on('resize', () => {
+      this.centerGrid();
+    });
+  }
+
+  private handleGridClick(screenX: number, screenY: number) {
+    //grid coordinates
+    const localX = screenX - this.gridContainer.x;
+    const localY = screenY - this.gridContainer.y;
+    
+    const gridPos = GridUtils.pixelToPosition(localX, localY, this.tileSize);
+    
+    if (GridUtils.isValidPosition(gridPos, this.gridWidth, this.gridHeight)) {
+      console.log(`Clicked grid tile: ${gridPos.x}, ${gridPos.y}`);
+      this.placePipe(gridPos);
+    }
+  }
+
+  private placePipe(gridPos: GridPosition) {
+    const pipeGraphic = this.add.rectangle(
+      gridPos.x * this.tileSize + this.tileSize / 2,
+      gridPos.y * this.tileSize + this.tileSize / 2,
+      this.tileSize - 4,
+      this.tileSize - 4,
+      0x4a90e2
+    );
+    
+    this.gridContainer.add(pipeGraphic);
+  }
 }
