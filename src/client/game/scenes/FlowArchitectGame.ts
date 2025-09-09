@@ -11,10 +11,16 @@ export class FlowArchitectGame extends Scene {
   private gridWidth: number = 12;
   private gridHeight: number = 12;
   private tileSize: number = 48;
+
   private placedPipes: Map<string, PipeComponent> = new Map();
   private selectedPipeType: ComponentType = ComponentType.STRAIGHT_PIPE;
   private selectedMaterial: PipeType = PipeType.STANDARD;
   
+  private toolbar!: Phaser.GameObjects.Container;
+  private toolbarBackground!: Phaser.GameObjects.Graphics;
+  private pipeButtons: Phaser.GameObjects.Container[] = [];
+  private selectedButton: Phaser.GameObjects.Container | null = null;
+
   constructor() {
     super('FlowArchitectGame');
   }
@@ -65,7 +71,117 @@ export class FlowArchitectGame extends Scene {
     this.drawGrid();
     this.gridContainer.add(this.gridBackground);
 
+    this.createToolbar();
+
     this.centerGrid();
+  }
+
+  //ui
+  private createToolbar() {
+    const toolbarHeight = 80;
+    const toolbarY = this.scale.height - toolbarHeight;
+    
+    this.toolbar = this.add.container(0, toolbarY);
+    
+    //toolbar background
+    this.toolbarBackground = this.add.graphics();
+    this.toolbarBackground.fillStyle(0x2d3748, 0.9);
+    this.toolbarBackground.fillRect(0, 0, this.scale.width, toolbarHeight);
+    this.toolbar.add(this.toolbarBackground);
+    
+    this.createPipeButtons();
+  }
+
+  private createPipeButtons() {
+    const buttonSize = 60;
+    const buttonSpacing = 70;
+    const startX = 50;
+    const buttonY = 40;
+    
+    const pipeTypes = [
+      { type: ComponentType.STRAIGHT_PIPE, label: '—', color: 0x4A90E2 },
+      { type: ComponentType.CORNER_PIPE, label: '⌐', color: 0x4A90E2 },
+      { type: ComponentType.T_JUNCTION, label: '⊥', color: 0x4A90E2 },
+    ];
+    
+    pipeTypes.forEach((pipeInfo, index) => {
+      const buttonX = startX + (index * buttonSpacing);
+      
+      const button = this.add.container(buttonX, buttonY);
+      
+      //Button background
+      const bg = this.add.graphics();
+      bg.fillStyle(0x4a5568);
+      bg.lineStyle(2, 0x718096);
+      bg.fillRoundedRect(-buttonSize/2, -buttonSize/2, buttonSize, buttonSize, 8);
+      bg.strokeRoundedRect(-buttonSize/2, -buttonSize/2, buttonSize, buttonSize, 8);
+      button.add(bg);
+      
+      // Button icon
+      const icon = this.add.text(0, 0, pipeInfo.label, {
+        fontSize: '24px',
+        color: '#ffffff',
+        fontFamily: 'Arial'
+      }).setOrigin(0.5);
+      button.add(icon);
+      
+      button.setSize(buttonSize, buttonSize);
+      button.setInteractive({ useHandCursor: true });
+      
+      button.on('pointerdown', () => {
+        this.selectPipeType(pipeInfo.type, button);
+      });
+      
+      button.on('pointerover', () => {
+        bg.clear();
+        bg.fillStyle(0x5a6578);
+        bg.lineStyle(2, 0x718096);
+        bg.fillRoundedRect(-buttonSize/2, -buttonSize/2, buttonSize, buttonSize, 8);
+        bg.strokeRoundedRect(-buttonSize/2, -buttonSize/2, buttonSize, buttonSize, 8);
+      });
+      
+      button.on('pointerout', () => {
+        if (this.selectedButton !== button) {
+          bg.clear();
+          bg.fillStyle(0x4a5568);
+          bg.lineStyle(2, 0x718096);
+          bg.fillRoundedRect(-buttonSize/2, -buttonSize/2, buttonSize, buttonSize, 8);
+          bg.strokeRoundedRect(-buttonSize/2, -buttonSize/2, buttonSize, buttonSize, 8);
+        }
+      });
+      
+      this.toolbar.add(button);
+      this.pipeButtons.push(button);
+      
+      //default selection: first button
+      if (index === 0) {
+        this.selectPipeType(pipeInfo.type, button);
+      }
+    });
+  }
+
+  private selectPipeType(type: ComponentType, button: Phaser.GameObjects.Container) {
+    // Reset previous selection
+    if (this.selectedButton) {
+      const prevBg = this.selectedButton.list[0] as Phaser.GameObjects.Graphics;
+      prevBg.clear();
+      prevBg.fillStyle(0x4a5568);
+      prevBg.lineStyle(2, 0x718096);
+      prevBg.fillRoundedRect(-30, -30, 60, 60, 8);
+      prevBg.strokeRoundedRect(-30, -30, 60, 60, 8);
+    }
+    
+    //Highlight new selection
+    const bg = button.list[0] as Phaser.GameObjects.Graphics;
+    bg.clear();
+    bg.fillStyle(0x3182ce);
+    bg.lineStyle(2, 0x2b6cb0);
+    bg.fillRoundedRect(-30, -30, 60, 60, 8);
+    bg.strokeRoundedRect(-30, -30, 60, 60, 8);
+    
+    this.selectedButton = button;
+    this.selectedPipeType = type;
+    console.log(`Selected pipe type: ${type}`);
   }
 
   private drawGrid() {
@@ -89,9 +205,10 @@ export class FlowArchitectGame extends Scene {
   private centerGrid() {
     const gridPixelWidth = this.gridWidth * this.tileSize;
     const gridPixelHeight = this.gridHeight * this.tileSize;
+    const toolbarHeight = 80;
     
     this.gridContainer.x = (this.scale.width - gridPixelWidth) / 2;
-    this.gridContainer.y = (this.scale.height - gridPixelHeight) / 2;
+    this.gridContainer.y = (this.scale.height - gridPixelHeight - toolbarHeight) / 2;
   }
 
   private setupInput() {
