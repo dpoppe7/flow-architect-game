@@ -21,7 +21,7 @@ export class Boot extends Scene {
     this.registry.set('playerProgress', { levelCompleted: 0 });
 
     // Start the main preloader
-    this.scene.start('FlowPreloader');
+    this.scene.start('Preloader');
     
   }
 

@@ -1,6 +1,7 @@
 import { Boot } from './scenes/Boot';
 import { GameOver } from './scenes/GameOver';
-import { Game as MainGame } from './scenes/Game';
+//import { Game as MainGame } from './scenes/Game';
+import { FlowArchitectGame as MainGame } from './scenes/FlowArchitectGame';
 import { MainMenu } from './scenes/MainMenu';
 import * as Phaser from 'phaser';
 import { AUTO, Game } from 'phaser';
