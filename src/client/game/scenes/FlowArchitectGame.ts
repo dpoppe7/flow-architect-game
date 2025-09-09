@@ -1,6 +1,8 @@
 import { Scene } from 'phaser';
 import * as Phaser from 'phaser';
 import { GridPosition, GAME_CONFIG, GridUtils, LevelData } from '../core/GameTypes';
+import { ComponentType, PipeType } from '../core/GameTypes';
+import { PipeComponent } from '../components/PipeComponent';
 
 export class FlowArchitectGame extends Scene {
   private gridContainer!: Phaser.GameObjects.Container;
@@ -9,6 +11,9 @@ export class FlowArchitectGame extends Scene {
   private gridWidth: number = 12;
   private gridHeight: number = 12;
   private tileSize: number = 48;
+  private placedPipes: Map<string, PipeComponent> = new Map();
+  private selectedPipeType: ComponentType = ComponentType.STRAIGHT_PIPE;
+  private selectedMaterial: PipeType = PipeType.STANDARD;
   
   constructor() {
     super('FlowArchitectGame');
@@ -92,11 +97,30 @@ export class FlowArchitectGame extends Scene {
   private setupInput() {
     // click handling for grid tiles
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      this.handleGridClick(pointer.x, pointer.y);
+      if (pointer.leftButtonDown()) {
+        this.handleGridClick(pointer.x, pointer.y);
+      } else if (pointer.rightButtonDown()) {
+        this.handleRotateClick(pointer.x, pointer.y);
+      }
     });
 
     this.scale.on('resize', () => {
       this.centerGrid();
+    });
+
+    this.input.keyboard?.on('keydown-ONE', () => {
+      this.selectedPipeType = ComponentType.STRAIGHT_PIPE;
+      console.log('Selected: Straight Pipe');
+    });
+
+    this.input.keyboard?.on('keydown-TWO', () => {
+      this.selectedPipeType = ComponentType.CORNER_PIPE;
+      console.log('Selected: Corner Pipe');
+    });
+
+    this.input.keyboard?.on('keydown-THREE', () => {
+      this.selectedPipeType = ComponentType.T_JUNCTION;
+      console.log('Selected: T-Junction');
     });
   }
 
@@ -113,15 +137,41 @@ export class FlowArchitectGame extends Scene {
     }
   }
 
+  private handleRotateClick(screenX: number, screenY: number) {
+    const localX = screenX - this.gridContainer.x;
+    const localY = screenY - this.gridContainer.y;
+    
+    const gridPos = GridUtils.pixelToPosition(localX, localY, this.tileSize);
+    const key = `${gridPos.x},${gridPos.y}`;
+    
+    if (this.placedPipes.has(key)) {
+      this.placedPipes.get(key)!.rotatePipe();
+    }
+  }
+
   private placePipe(gridPos: GridPosition) {
-    const pipeGraphic = this.add.rectangle(
-      gridPos.x * this.tileSize + this.tileSize / 2,
-      gridPos.y * this.tileSize + this.tileSize / 2,
-      this.tileSize - 4,
-      this.tileSize - 4,
-      0x4a90e2
+    const key = `${gridPos.x},${gridPos.y}`;
+  
+    // if pipe exists remove it
+    if (this.placedPipes.has(key)) {
+      const existingPipe = this.placedPipes.get(key)!;
+      existingPipe.destroy();
+      this.placedPipes.delete(key);
+    }
+  
+    // Create new pipe
+    const pixelPos = GridUtils.positionToPixel(gridPos, this.tileSize);
+    const pipe = new PipeComponent(
+      this,
+      pixelPos.x,
+      pixelPos.y,
+      this.selectedPipeType,
+      this.selectedMaterial,
+      gridPos,
+      this.tileSize
     );
     
-    this.gridContainer.add(pipeGraphic);
+    this.gridContainer.add(pipe);
+    this.placedPipes.set(key, pipe);
   }
 }
