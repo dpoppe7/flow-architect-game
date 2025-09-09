@@ -1,6 +1,6 @@
 {
   "$schema": "https://developers.reddit.com/schema/config-file.v1.json",
-  "name": "Hydroflow-1",
+  "name": "hydroflow-1",
   "post": {
     "dir": "dist/client",
     "entrypoints": {

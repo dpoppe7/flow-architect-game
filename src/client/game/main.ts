@@ -11,7 +11,7 @@ import { Preloader } from './scenes/Preloader';
 const config: Phaser.Types.Core.GameConfig = {
   type: AUTO,
   parent: 'game-container',
-  backgroundColor: '#028af8',
+  backgroundColor: '#2C3E50',
   scale: {
     // Keep a fixed game resolution but automatically scale it to fit within the available
     // web-view / device while maintaining aspect ratio.
@@ -19,6 +19,14 @@ const config: Phaser.Types.Core.GameConfig = {
     autoCenter: Phaser.Scale.CENTER_BOTH,
     width: 1024,
     height: 768,
+    min: {
+      width: 320,
+      height: 240
+    },
+    max: {
+      width: 1920,
+      height: 1080
+    }
   },
   scene: [Boot, Preloader, MainMenu, MainGame, GameOver],
 };
