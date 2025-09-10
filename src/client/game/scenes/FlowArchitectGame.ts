@@ -3,11 +3,11 @@ import * as Phaser from 'phaser';
 import { LevelData, DigTool, LIQUID_TYPES, GridUtils, GridPosition } from '../core/GameTypes';
 import { TileSystem } from '../systems/TileSystem';
 import { WaterPhysics } from '../systems/WaterPhysics';
+import { Collectible } from '../entities/Collectible';
+import { COLLECTIBLE_PRESETS, LEVEL_THEMES, LevelTheme } from '../data/CollectiblePresets';
 
 export class FlowArchitectGame extends Scene {
   private gridContainer!: Phaser.GameObjects.Container;
-  // private gridBackground!: Phaser.GameObjects.Graphics;
-  // private currentLevel: LevelData | null = null;
   private gridWidth: number = 12;
   private gridHeight: number = 12;
   private tileSize: number = 48;
@@ -22,6 +22,17 @@ export class FlowArchitectGame extends Scene {
   private isWaterFlowing: boolean = false;
   private waterButton!: Phaser.GameObjects.Text;
 
+  private collectibles: Collectible[] = [];
+  private collectedCount: number = 0;
+  private totalCollectibles: number = 0;
+  private collectibleCounter!: Phaser.GameObjects.Text;
+  private progressBar!: Phaser.GameObjects.Graphics;
+  private progressBarBg!: Phaser.GameObjects.Graphics;
+  private currentTheme: LevelTheme = LEVEL_THEMES.BATHTIME!;
+
+  private isLevelComplete: boolean = false;
+  private victoryText!: Phaser.GameObjects.Text;
+
   constructor() {
     super('FlowArchitectGame');
   }
@@ -30,19 +41,30 @@ export class FlowArchitectGame extends Scene {
     this.setupCamera();
     this.createTileSystem();
     this.createWaterPhysics();
+    this.createCollectibles();
     this.createUI();
     this.setupInput();
     this.addWaterSource();
+
+    this.events.on('collectibleCollected', this.collectCollectible, this);
   }
 
   override update() {
     if (this.waterPhysics) {
       this.waterPhysics.update();
     }
+
+    // Update all collectibles
+    this.collectibles.forEach(collectible => collectible.update());
+
+    // Check victory
+    if (!this.isLevelComplete && this.collectedCount >= this.totalCollectibles && this.totalCollectibles > 0) {
+      this.checkVictoryCondition();
+    }
   }
 
   private setupCamera() {
-    this.cameras.main.setBackgroundColor(0x1a1a2e);
+    this.cameras.main.setBackgroundColor(this.currentTheme.backgroundColor);
   }
 
   private createTileSystem() {
@@ -65,6 +87,86 @@ export class FlowArchitectGame extends Scene {
     );
   }
 
+  private createCollectibles() {
+    // Clear existing collectibles
+    this.collectibles.forEach(collectible => collectible.destroy());
+    this.collectibles = [];
+    this.collectedCount = 0;
+
+    // Creates collectibles based on current theme
+    const collectibleTypes = this.currentTheme.collectibles;
+    const collectiblePositions = this.generateCollectiblePositions(collectibleTypes.length * 2);
+
+    let collectibleIndex = 0;
+    for (let i = 0; i < collectibleTypes.length * 2 && collectibleIndex < collectiblePositions.length; i++) {
+      const collectibleType = collectibleTypes[i % collectibleTypes.length];
+      
+      if (!collectibleType) continue;
+      
+      const config = COLLECTIBLE_PRESETS[collectibleType];
+      const position = collectiblePositions[collectibleIndex];
+      
+      if (config && position) {
+        const collectible = new Collectible(
+          this,
+          position,
+          this.tileSize,
+          config,
+          `${collectibleType}_${position.x}_${position.y}`
+        );
+        
+        // Add to grid container so it moves with the grid
+        this.gridContainer.add(collectible);
+        this.collectibles.push(collectible);
+        collectibleIndex++;
+      }
+    }
+
+    this.totalCollectibles = this.collectibles.length;
+    //console.log(`Created ${this.totalCollectibles} collectibles for theme: ${this.currentTheme.name}`);
+  }
+
+  private generateCollectiblePositions(count: number): GridPosition[] {
+    const positions: GridPosition[] = [];
+    const maxAttempts = 100;
+    let attempts = 0;
+
+    while (positions.length < count && attempts < maxAttempts) {
+      const x = Math.floor(Math.random() * this.gridWidth);
+      const y = Math.floor(Math.random() * this.gridHeight);
+      const position = { x, y };
+
+      // Check if position
+      if (this.isValidCollectiblePosition(position, positions)) {
+        positions.push(position);
+      }
+      attempts++;
+    }
+
+    return positions;
+  }
+
+  private isValidCollectiblePosition(position: GridPosition, existingPositions: GridPosition[]): boolean {
+    // Don't place on water source or drain
+    if (GridUtils.arePositionsEqual(position, this.waterSource) || 
+        GridUtils.arePositionsEqual(position, this.drain)) {
+      return false;
+    }
+
+    // Don't place too close to water source or drain
+    const sourceDistance = Math.abs(position.x - this.waterSource.x) + Math.abs(position.y - this.waterSource.y);
+    const drainDistance = Math.abs(position.x - this.drain.x) + Math.abs(position.y - this.drain.y);
+    
+    if (sourceDistance < 2 || drainDistance < 2) {
+      return false;
+    }
+
+    // Don't place on top of existing collectibles
+    return !existingPositions.some(existing => 
+      GridUtils.arePositionsEqual(position, existing)
+    );
+  }
+
   private centerGrid() {
     const gridPixelWidth = this.gridWidth * this.tileSize;
     const gridPixelHeight = this.gridHeight * this.tileSize;
@@ -75,8 +177,16 @@ export class FlowArchitectGame extends Scene {
 
   private createUI() {
     // Simple instruction text
-    this.add.text(20, 20, 'Dig paths to guide water to the drain!', {
-      fontSize: '20px',
+    this.add.text(20, 20, this.currentTheme.name, {
+      fontSize: '24px',
+      color: '#ffffff',
+      backgroundColor: 'rgba(0,0,0,0.8)',
+      padding: { x: 15, y: 8 }
+    });
+
+    //description
+    this.add.text(20, 60, this.currentTheme.description, {
+      fontSize: '16px',
       color: '#ffffff',
       backgroundColor: 'rgba(0,0,0,0.7)',
       padding: { x: 10, y: 5 }
@@ -102,6 +212,160 @@ export class FlowArchitectGame extends Scene {
       this.toggleWaterFlow();
     });
 
+    this.collectibleCounter = this.add.text(20, 190, `Collected: ${this.collectedCount}/${this.totalCollectibles}`, {
+      fontSize: '18px',
+      color: '#ffffff',
+      backgroundColor: 'rgba(0,0,0,0.8)',
+      padding: { x: 15, y: 8 }
+    });
+
+    //progress bar background
+    this.progressBarBg = this.add.graphics();
+    this.progressBarBg.fillStyle(0x333333);
+    this.progressBarBg.fillRect(20, 230, 200, 20);
+    this.progressBarBg.lineStyle(2, 0x666666);
+    this.progressBarBg.strokeRect(20, 230, 200, 20);
+
+    // Progress bar fill
+    this.progressBar = this.add.graphics();
+    this.updateProgressBar();
+
+    // Theme selector buttons (for testing/demo purposes)
+    this.createThemeButtons();
+
+    // Victory text (hidden initially)
+    this.victoryText = this.add.text(this.scale.width / 2, this.scale.height / 2, 'Level Complete!', {
+      fontSize: '48px',
+      color: '#FFD700',
+      backgroundColor: 'rgba(0,0,0,0.9)',
+      padding: { x: 30, y: 15 }
+    }).setOrigin(0.5).setVisible(false);
+  }
+
+  private createThemeButtons() {
+    const themes = Object.keys(LEVEL_THEMES);
+    let yOffset = 280;
+
+    themes.forEach((themeKey, index) => {
+      const theme = LEVEL_THEMES[themeKey];
+
+      if (!theme) return;
+
+      const isCurrentTheme = theme === this.currentTheme;
+      
+      const button = this.add.text(20, yOffset, theme.name, {
+        fontSize: '14px',
+        color: isCurrentTheme ? '#FFD700' : '#ffffff',
+        backgroundColor: isCurrentTheme ? 'rgba(255,215,0,0.2)' : 'rgba(100,100,100,0.7)',
+        padding: { x: 8, y: 4 }
+      }).setInteractive({ useHandCursor: true });
+
+      button.on('pointerdown', () => {
+        this.switchTheme(themeKey);
+      });
+
+      yOffset += 30;
+    });
+  }
+
+  private switchTheme(themeKey: string) {
+    if (LEVEL_THEMES[themeKey] && LEVEL_THEMES[themeKey] !== this.currentTheme) {
+      this.currentTheme = LEVEL_THEMES[themeKey];
+      this.isLevelComplete = false;
+      this.victoryText.setVisible(false);
+      
+      this.cameras.main.setBackgroundColor(this.currentTheme.backgroundColor);
+      
+      this.stopWaterFlow();
+      this.waterPhysics.clearAllWater();
+      
+      this.createCollectibles();
+      
+      // Recreate UI to reflect new theme
+      this.scene.restart();
+    }
+  }
+
+  private updateProgressBar() {
+    this.progressBar.clear();
+    
+    if (this.totalCollectibles > 0) {
+      const progress = this.collectedCount / this.totalCollectibles;
+      this.progressBar.fillStyle(0x00FF00);
+      this.progressBar.fillRect(22, 232, (200 - 4) * progress, 16);
+    }
+  }
+
+  private collectCollectible(collectible: Collectible) {
+    if (collectible.collect()) {
+      this.collectedCount++;
+      
+      // Update UI
+      this.collectibleCounter.setText(`Collected: ${this.collectedCount}/${this.totalCollectibles}`);
+      this.updateProgressBar();
+      
+      console.log(`Collected ${collectible.getType()}! Progress: ${this.collectedCount}/${this.totalCollectibles}`);
+      
+      // feedback
+      this.createCollectionFeedback(collectible.getGridPosition());
+    }
+  }
+
+  private createCollectionFeedback(gridPos: GridPosition) {
+    const pixelPos = GridUtils.positionToPixel(gridPos, this.tileSize);
+    const worldPos = {
+      x: pixelPos.x + this.gridContainer.x,
+      y: pixelPos.y + this.gridContainer.y
+    };
+
+    // Floating text
+    const scoreText = this.add.text(worldPos.x, worldPos.y, '+1', {
+      fontSize: '24px',
+      color: '#FFD700',
+      stroke: '#000000',
+      strokeThickness: 2
+    }).setOrigin(0.5);
+
+    // Animate score text
+    this.tweens.add({
+      targets: scoreText,
+      y: worldPos.y - 50,
+      alpha: 0,
+      scaleX: 1.5,
+      scaleY: 1.5,
+      duration: 1000,
+      ease: 'Power2',
+      onComplete: () => scoreText.destroy()
+    });
+  }
+
+  private checkVictoryCondition() {
+    // Check if water has reached the drain
+    const drainWaterLevel = this.waterPhysics.getWaterLevelAt(this.drain);
+    
+    if (drainWaterLevel > 0.5) { // Water has reached the drain
+      this.isLevelComplete = true;
+      this.showVictoryScreen();
+    }
+  }
+
+  private showVictoryScreen() {
+    this.victoryText.setVisible(true);
+    
+    // Victory animation
+    this.tweens.add({
+      targets: this.victoryText,
+      scaleX: 1.2,
+      scaleY: 1.2,
+      duration: 500,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut'
+    });
+
+    this.stopWaterFlow();
+
+    //console.log(`Level Complete! Theme: ${this.currentTheme.name}, Collectibles: ${this.collectedCount}/${this.totalCollectibles}`);
   }
 
   private addWaterSource() {
@@ -145,11 +409,6 @@ export class FlowArchitectGame extends Scene {
     this.input.on('pointerup', () => {
       this.isDragging = false;
     });
-
-    // // Spacebar to release water
-    // this.input.keyboard?.on('keydown-SPACE', () => {
-    //   this.startWaterFlow();
-    // });
 
     // Handle resize
     this.scale.on('resize', () => {
@@ -197,4 +456,20 @@ export class FlowArchitectGame extends Scene {
       this.startWaterFlow();
     }
   }
+
+  public exportLevel(): LevelData {
+    return {
+      gridWidth: this.gridWidth,
+      gridHeight: this.gridHeight,
+      waterSource: this.waterSource,
+      drain: this.drain,
+      collectibles: this.collectibles.map(c => ({
+        position: c.getGridPosition(),
+        type: c.getType(),
+        id: c.getId()
+      })),
+      theme: this.currentTheme
+    };
+  }
 }
+

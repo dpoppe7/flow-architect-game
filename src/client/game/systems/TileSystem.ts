@@ -1,13 +1,15 @@
 import * as Phaser from 'phaser';
-import { TileType, GameTile, GridPosition, GridUtils } from '../core/GameTypes';
+import { Tile, TileType, GridPosition, GridUtils } from '../core/GameTypes';
 
 export class TileSystem {
   private scene: Phaser.Scene;
-  private tiles: GameTile[][] = [];
-  private tileGraphics: Phaser.GameObjects.Graphics[][] = [];
+  //private tiles: GameTile[][] = [];
+  private tileGraphics: Phaser.GameObjects.Graphics[] = [];
   private tileSize: number;
   private gridWidth: number;
   private gridHeight: number;
+  private grid: Tile[][] = []
+  private tileSpriteSheet?: Phaser.GameObjects.Sprite;
 
   constructor(scene: Phaser.Scene, tileSize: number, gridWidth: number, gridHeight: number) {
     this.scene = scene;
@@ -18,159 +20,105 @@ export class TileSystem {
   }
 
   private initializeTiles() {
-    this.tiles = Array(this.gridWidth).fill(null).map(() => Array(this.gridHeight));
-    this.tileGraphics = Array(this.gridWidth).fill(null).map(() => Array(this.gridHeight));
+    // this.tiles = Array(this.gridWidth).fill(null).map(() => Array(this.gridHeight));
+    // this.tileGraphics = Array(this.gridWidth).fill(null).map(() => Array(this.gridHeight));
 
-    for (let x = 0; x < this.gridWidth; x++) {
-      for (let y = 0; y < this.gridHeight; y++) {
-        // Create default dirt level
-        let tileType = TileType.EMPTY;
-        
-        // Fill bottom half with dirt, leave top half empty
-        if (y > this.gridHeight / 2) {
-          tileType = TileType.DIRT;
+    this.grid = Array(this.gridWidth).fill(null).map(() => Array(this.gridHeight));
+
+    for (let y = 0; y < this.gridWidth; y++) {
+      this.grid[y] = [];
+      for (let x = 0; x < this.gridHeight; x++) {
+        let type = TileType.DIRT;
+        if (Math.random() > 0.9) {
+            type = TileType.ROCK;
+        }
+        if (y < 2) {
+          type = TileType.EMPTY;
         }
         
-        // Add some rock layers
-        if (y > this.gridHeight - 3) {
-          tileType = TileType.ROCK;
-        }
-
-        const tile: GameTile = {
-          type: tileType,
-          position: { x, y },
-          hasWater: false,
-          waterAmount: 0,
-          isDiggable: tileType === TileType.DIRT
+        this.grid[y]![x] = {
+            type: type,
+            waterLevel: 0,
+            graphics: null
         };
-
-        const tileRow = this.tiles[x];
-        if (tileRow) {
-            tileRow[y] = tile;
-        }
       }
     }
   }
 
   public createTileGraphics(container: Phaser.GameObjects.Container) {
-    for (let x = 0; x < this.gridWidth; x++) {
-      for (let y = 0; y < this.gridHeight; y++) {
-        const tileRow = this.tiles[x];
-        if (!tileRow) continue;
+    for (let y = 0; y < this.gridHeight; y++) {
+      for (let x = 0; x < this.gridWidth; x++) {
+        const pixelPos = GridUtils.positionToPixel({ x, y }, this.tileSize);
+        const tileData = this.grid[y]![x]!;
+        const graphics = this.scene.add.graphics();
 
-        const tile = tileRow[y];
-        if (!tile) continue;
-
-        const pixelPos = GridUtils.positionToPixel(tile.position, this.tileSize);
+        container.add(graphics);
+        this.tileGraphics.push(graphics);
+        tileData.graphics = graphics;
         
-        const graphic = this.scene.add.graphics();
-        graphic.x = pixelPos.x - this.tileSize / 2;
-        graphic.y = pixelPos.y - this.tileSize / 2;
-        
-        this.drawTile(graphic, tile);
-        container.add(graphic);
-        
-        const graphicRow = this.tileGraphics[x];
-        if (graphicRow) {
-            graphicRow[y] = graphic;
-        }
+        this.drawTile(tileData, x, y);
       }
     }
   }
 
-  private drawTile(graphic: Phaser.GameObjects.Graphics, tile: GameTile) {
-    graphic.clear();
-    
-    switch (tile.type) {
-      case TileType.DIRT:
-        graphic.fillStyle(0x8B4513); // Brown
-        graphic.fillRect(0, 0, this.tileSize, this.tileSize);
+  private drawTile(tile: Tile, x: number, y: number) {
+    if (!tile.graphics) return;
 
-        graphic.fillStyle(0x654321);
-        for (let i = 0; i < 5; i++) {
-          const dotX = Math.random() * this.tileSize;
-          const dotY = Math.random() * this.tileSize;
-          graphic.fillCircle(dotX, dotY, 1);
-        }
-        break;
-        
-      case TileType.ROCK:
-        graphic.fillStyle(0x696969); // Gray
-        graphic.fillRect(0, 0, this.tileSize, this.tileSize);
-        graphic.lineStyle(1, 0x555555);
-        graphic.strokeRect(0, 0, this.tileSize, this.tileSize);
-        break;
-        
-      case TileType.EMPTY:
-        break;
-        
-      case TileType.WATER:
-        graphic.fillStyle(0x4A90E2, 0.8); // Semi-transparent blue
-        graphic.fillRect(0, 0, this.tileSize, this.tileSize);
-        break;
+    const graphics = tile.graphics;
+    graphics.clear();
+    graphics.fillStyle(this.getTileColor(tile.type));
+    graphics.fillRect(x * this.tileSize, y * this.tileSize, this.tileSize, this.tileSize);
+    graphics.lineStyle(1, 0x000000, 0.2);
+    graphics.strokeRect(x * this.tileSize, y * this.tileSize, this.tileSize, this.tileSize);
+
+    // Draw water level on top
+    if (tile.waterLevel > 0) {
+      graphics.fillStyle(0x4A90E2, 0.8);
+      const waterHeight = tile.waterLevel * this.tileSize;
+      graphics.fillRect(x * this.tileSize, y * this.tileSize + this.tileSize - waterHeight, this.tileSize, waterHeight);
     }
   }
 
-  public digTile(gridPos: GridPosition): boolean {
-    if (!GridUtils.isValidPosition(gridPos, this.gridWidth, this.gridHeight)) {
-      return false;
+  private getTileColor(type: TileType): number {
+    switch (type) {
+        case TileType.DIRT:
+            return 0x8B4513; // Brown
+        case TileType.ROCK:
+            return 0x808080; // Gray
+        case TileType.EMPTY:
+            return 0xF5F5DC; // Beige
+        default:
+            return 0xFFFFFF;
     }
+  }
 
-    const tileRow = this.tiles[gridPos.x];
-    if (!tileRow) return false;
-    
-    const tile = tileRow[gridPos.y];
-    if (!tile) return false;
-    
-    if (tile.isDiggable && tile.type === TileType.DIRT) {
+  public getTile(pos: GridPosition): Tile | null {
+    if (!GridUtils.isValidPosition(pos, this.gridWidth, this.gridHeight)) {
+        return null;
+    }
+    return this.grid[pos.y]?.[pos.x] || null;
+  }
+
+  public digTile(pos: GridPosition): boolean {
+    const tile = this.getTile(pos);
+    if (tile && (tile.type === TileType.DIRT || tile.type === TileType.ROCK)) {
         tile.type = TileType.EMPTY;
-        tile.isDiggable = false;
-        
-        // Redraw the tile
-        const graphicRow = this.tileGraphics[gridPos.x];
-        if (graphicRow) {
-        const graphic = graphicRow[gridPos.y];
-        if (graphic) {
-            this.drawTile(graphic, tile);
-        }
-        }
-        
+        this.drawTile(tile, pos.x, pos.y);
         return true;
     }
-    
     return false;
   }
 
-  public getTile(gridPos: GridPosition): GameTile | null {
-    if (!GridUtils.isValidPosition(gridPos, this.gridWidth, this.gridHeight)) {
-      return null;
-    }
-    
-    const tileRow = this.tiles[gridPos.x];
-    if (!tileRow) return null;
-    
-    return tileRow[gridPos.y] || null;
-  }
-
-  public setTileWater(gridPos: GridPosition, amount: number) {
-    const tile = this.getTile(gridPos);
-    if (tile && tile.type === TileType.EMPTY) {
-        tile.hasWater = amount > 0;
-        tile.waterAmount = amount;
-        tile.type = amount > 0 ? TileType.WATER : TileType.EMPTY;
-        
-        const graphicRow = this.tileGraphics[gridPos.x];
-        if (graphicRow) {
-        const graphic = graphicRow[gridPos.y];
-        if (graphic) {
-            this.drawTile(graphic, tile);
-        }
-        }
-    }
-  }
-
-  public canWaterFlowTo(gridPos: GridPosition): boolean {
-    const tile = this.getTile(gridPos);
+  public canWaterFlowTo(pos: GridPosition): boolean {
+    const tile = this.getTile(pos);
     return tile !== null && (tile.type === TileType.EMPTY || tile.type === TileType.WATER);
+  }
+
+  public setTileWater(pos: GridPosition, level: number) {
+    const tile = this.getTile(pos);
+    if (tile) {
+      tile.waterLevel = level;
+      this.drawTile(tile, pos.x, pos.y);
+    }
   }
 }
