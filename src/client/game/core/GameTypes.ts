@@ -103,12 +103,12 @@ export interface LevelData {
 
 export interface WinCondition {
   type: 'collection' | 'time' | 'efficiency' | 'purity';
-  target: any;
+  target: number;
   completed: boolean;
 }
 
 // Predefined liquid types
-export const LIQUID_TYPES: { [key: string]: LiquidType } = {
+export const LIQUID_TYPES = {
   WATER: {
     id: 'water',
     name: 'Water',
@@ -145,7 +145,7 @@ export const LIQUID_TYPES: { [key: string]: LiquidType } = {
     speed: 7,
     properties: [LiquidProperty.CORROSIVE]
   }
-};
+} as const satisfies Record<string, LiquidType>;
 
 // Game configuration
 export const GAME_CONFIG = {
@@ -189,6 +189,39 @@ export class GridUtils {
       { x: pos.x, y: pos.y + 1 }  // Down
     ];
   }
+}
+
+// Add these new enums and interfaces
+export enum TileType {
+  EMPTY = 'empty',
+  DIRT = 'dirt',
+  ROCK = 'rock',
+  WATER = 'water',
+  POISON = 'poison',
+  ALGAE = 'algae',
+  DRAIN = 'drain'
+}
+
+export enum DigTool {
+  FINGER = 'finger',
+  BOMB = 'bomb'
+}
+
+export interface GameTile {
+  type: TileType;
+  position: GridPosition;
+  hasWater: boolean;
+  waterAmount: number;
+  isDiggable: boolean;
+}
+
+export interface WaterDrop {
+  x: number;
+  y: number;
+  velocityX: number;
+  velocityY: number;
+  gridX: number;
+  gridY: number;
 }
 
 // Component compatibility matrix
